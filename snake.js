@@ -69,12 +69,9 @@ var SnakeGame = (function(d, w) {
                     return points.slice(1);
                 },
                 contains: function(point) {
-                    points.forEach(function(snake_point) {
-                        if(snake_point.x == point.x && snake_point.y == point.y) {
-                            return true;
-                        }
+                    return points.some(function(snake_point) {
+                        return snake_point.x == point.x && snake_point.y == point.y;
                     });
-                    return false;
                 },
                 getDirection: function() {
                     return directionCallback(points);
