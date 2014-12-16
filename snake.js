@@ -47,17 +47,21 @@ var SnakeGame = (function(d, w) {
         },
         Snake = function(opts) {
             var color = opts.color,
+                user_controlled = opts.user_controlled,
                 directionCallback = opts.directionCallback,
+                current_direction,
                 points = [],
-                prev_last_segment_pos;
+                prev_last_segment_pos,
+                dead = false;
 
-            for(var x = opts.length - 1; x >= 0; --x) {
-                points.push(Point(x, 0));
+            for(var x = opts.pos.x + opts.length - 1; x >= opts.pos.x; --x) {
+                points.push(Point(x, opts.pos.y));
             }
 
             return {
                 color: color,
                 points: points,
+                user_controlled: user_controlled,
                 getHead: function() {
                     return points[0];
                 },
@@ -74,9 +78,13 @@ var SnakeGame = (function(d, w) {
                     });
                 },
                 getDirection: function() {
-                    return directionCallback(points);
+                    current_direction = directionCallback(points, current_direction);
+                    return current_direction;
                 },
                 move: function(new_head_x, new_head_y) {
+                    if(dead) {
+                        return;
+                    }
                     points.unshift(
                         Point(new_head_x, new_head_y)
                     );
@@ -84,6 +92,12 @@ var SnakeGame = (function(d, w) {
                 },
                 enlarge: function() {
                     points.push(prev_last_segment_pos);
+                },
+                die: function() {
+                    dead = true;
+                },
+                isDead: function() {
+                    return dead;
                 }
             };
         },
@@ -106,7 +120,7 @@ var SnakeGame = (function(d, w) {
 
             var game_state = STATES.PLAYING,
                 current_user_direction = DIRECTIONS.RIGHT,
-                last_moving_direction,
+                last_user_moving_direction,
                 snakes = [],
                 foods = [];
 
@@ -115,22 +129,22 @@ var SnakeGame = (function(d, w) {
                     case STATES.PLAYING:
                         switch(e.keyCode) {
                             case KEYS.LEFT:
-                                if(last_moving_direction != DIRECTIONS.RIGHT) {
+                                if(last_user_moving_direction != DIRECTIONS.RIGHT) {
                                     current_user_direction = DIRECTIONS.LEFT
                                 }
                                 break;
                             case KEYS.UP:
-                                if(last_moving_direction != DIRECTIONS.DOWN) {
+                                if(last_user_moving_direction != DIRECTIONS.DOWN) {
                                     current_user_direction = DIRECTIONS.UP
                                 }
                                 break;
                             case KEYS.RIGHT:
-                                if(last_moving_direction != DIRECTIONS.LEFT) {
+                                if(last_user_moving_direction != DIRECTIONS.LEFT) {
                                     current_user_direction = DIRECTIONS.RIGHT
                                 }
                                 break;
                             case KEYS.DOWN:
-                                if(last_moving_direction != DIRECTIONS.UP) {
+                                if(last_user_moving_direction != DIRECTIONS.UP) {
                                     current_user_direction = DIRECTIONS.DOWN
                                 }
                                 break;
@@ -151,11 +165,7 @@ var SnakeGame = (function(d, w) {
                         switch(e.keyCode) {
                             case KEYS.R:
                                 snakes = [];
-                                addSnake({
-                                    color: Color(0, 120, 255),
-                                    length: 10,
-                                    user_controlled: true
-                                });
+                                initializeSnakes();
                                 current_user_direction = DIRECTIONS.RIGHT;
                                 game_state = STATES.PLAYING;
                                 gameLoop();
@@ -165,10 +175,7 @@ var SnakeGame = (function(d, w) {
                 }
             }, false);
 
-            var getCanvas = function() {
-                    return canvas;
-                },
-                clear = function() {
+            var clear = function() {
                     context.clearRect(0, 0, game_opts.width, game_opts.height);
                 },
                 setFillColor = function(color) {
@@ -187,6 +194,9 @@ var SnakeGame = (function(d, w) {
                     context.restore();
                 },
                 drawSnake = function(snake) {
+                    if(snake.isDead() && Date.now() % 500 < 250) {
+                        return;
+                    }
                     context.save();
                     setFillColor(snake.color);
                     snake.getBody().forEach(drawPoint);
@@ -200,19 +210,22 @@ var SnakeGame = (function(d, w) {
                     snakes.forEach(drawSnake);
                     requestAnimationFrame(drawingLoop);
                 },
+                userControlledSnakeDirectionCallback = function() {
+                    return current_user_direction;
+                },
+                computerControlledSnakeDirectionCallback = function(points, current_direction) {
+                    return DIRECTIONS.RIGHT;
+                },
                 addSnake = function(opts) {
-                    if(opts.user_controlled) {
-                        opts.directionCallback = function() {
-                            return current_user_direction;
-                        }
-                    } else {
-                        opts.directionCallback = function() {
-                            return DIRECTIONS.RIGHT;
-                        }
-                    }
                     snakes.push(
                         Snake(opts)
                     );
+                },
+                deleteSnake = function(snake) {
+                    snake.die();
+                    setTimeout(function() {
+                        snakes.splice(snakes.indexOf(snake), 1);
+                    }, 1500);
                 },
                 moveSnake = function(snake) {
                     var curr_head = snake.getHead(),
@@ -226,64 +239,98 @@ var SnakeGame = (function(d, w) {
                         new_y += game_opts.height;
                     }
                     snake.move(new_x, new_y);
-                    last_moving_direction = direction;
+                    if(snake.user_controlled) {
+                        last_user_moving_direction = direction;
+                    }
                 },
                 addFood = function() {
-                    var point,
-                        any_snake_contains = false;
+                    var point;
                     do {
                         point = Point(
                             parseInt(Math.random() * game_opts.width),
                             parseInt(Math.random() * game_opts.height)
                         );
-                        snakes.forEach(function(snake) {
-                            if(snake.contains(point)) {
-                                any_snake_contains = true;
-                            }
-                        });
-                    } while(any_snake_contains);
+                    } while(snakes.some(function(snake) { return snake.contains(point); }));
                     foods.push(
                         Food({
                             position: point
                         })
                     );
                 },
+                deleteFood = function(food) {
+                    foods.splice(foods.indexOf(food), 1);
+                },
                 gameLoop = function() {
                     if(game_state != STATES.PLAYING) {
                         return;
                     }
+                    var dead_snakes = [];
+                    snakes.forEach(moveSnake);
                     snakes.forEach(function(snake) {
-                        moveSnake(snake);
-                        snake.getBody().forEach(function(point) {
-                            if(snake.isHead(point)) {
-                                game_state = STATES.GAME_OVER;
+                        if(snake.isDead()) {
+                            return;
+                        }
+                        snakes.forEach(function(other_snake) {
+                            if(other_snake.isDead()) {
                                 return;
                             }
-                        })
+                            other_snake.points.forEach(function(point) {
+                                if(snake.isHead(point) && snake.getHead() !== point) {
+                                    dead_snakes.push(snake);
+                                    if(snake.user_controlled) {
+                                        game_state = STATES.GAME_OVER;
+                                        return;
+                                    }
+                                }
+                            });
+                        });
                         foods.forEach(function(food) {
                             if(snake.isHead(food.position)) {
                                 // game_opts.onFoodEaten();
                                 snake.enlarge();
-                                foods.splice(foods.indexOf(food), 1);
+                                deleteFood(food);
                             }
                         });
                     });
-                    if(foods.length == 0) {
+                    dead_snakes.forEach(deleteSnake);
+                    if(foods.length < game_opts.food_count) {
                         addFood();
                     }
                     setTimeout(gameLoop, 50);
+                },
+                initializeSnakes = function() {
+                    addSnake({
+                        pos: {
+                            x: 10,
+                            y: 10
+                        },
+                        length: 5,
+                        color: game_opts.snake_color,
+                        user_controlled: true,
+                        directionCallback: userControlledSnakeDirectionCallback
+                        // directionCallback: computerControlledSnakeDirectionCallback
+                    });
+                    addSnake({
+                        pos: {
+                            x: 0,
+                            y: 0
+                        },
+                        length: 5,
+                        color: Color(150, 150, 150),
+                        user_controlled: false,
+                        // directionCallback: userControlledSnakeDirectionCallback
+                        directionCallback: computerControlledSnakeDirectionCallback
+                    });
                 };
 
-            addSnake({
-                color: game_opts.snake_color,
-                length: 10,
-                user_controlled: true
-            });
+            initializeSnakes();
             drawingLoop();
             gameLoop();
 
             return {
-                getCanvas: getCanvas
+                getCanvas: function() {
+                    return canvas;
+                }
             };
         },
         exports = function(opts) {
