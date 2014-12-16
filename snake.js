@@ -12,7 +12,8 @@ var SnakeGame = (function(d, w) {
             RIGHT: 39,
             DOWN: 40,
             P: 80,
-            R: 82
+            R: 82,
+            G: 71
         },
         DIRECTIONS = {
             UP: {
@@ -125,6 +126,7 @@ var SnakeGame = (function(d, w) {
                 foods = [];
 
             d.addEventListener('keydown', function(e) {
+                console.log(e.keyCode);
                 switch(game_state) {
                     case STATES.PLAYING:
                         switch(e.keyCode) {
@@ -173,6 +175,11 @@ var SnakeGame = (function(d, w) {
                         }
                         break;
                 }
+                switch(e.keyCode) {
+                    case KEYS.G:
+                        game_opts.draw_grid = !game_opts.draw_grid;
+                        break;
+                }
             }, false);
 
             var clear = function() {
@@ -181,8 +188,10 @@ var SnakeGame = (function(d, w) {
                 setFillColor = function(color) {
                     context.fillStyle = 'rgb(' + color.r + ', ' + color.g + ', ' + color.b + ')';
                 },
+                setStrokeStyle = function(color) {
+                    context.strokeStyle = 'rgb(' + color.r + ', ' + color.g + ', ' + color.b + ')';
+                },
                 drawPoint = function(point) {
-                    // context.fillRect(point.x, point.y, 1, 1);
                     context.beginPath();
                     context.arc(point.x + 0.5, point.y + 0.5, 0.5, 0, Math.PI * 2, false);
                     context.fill();
@@ -204,8 +213,28 @@ var SnakeGame = (function(d, w) {
                     drawPoint(snake.getHead());
                     context.restore();
                 },
+                drawGrid = function() {
+                    context.save();
+                    setStrokeStyle(Color(245, 245, 245));
+                    for(var x = 0.5; x <= game_opts.width; x += 2) {
+                        context.beginPath();
+                        context.moveTo(x, 0);
+                        context.lineTo(x, game_opts.height);
+                        context.stroke();
+                    }
+                    for(var y = 0.5; y <= game_opts.height; y += 2) {
+                        context.beginPath();
+                        context.moveTo(0, y);
+                        context.lineTo(game_opts.width, y);
+                        context.stroke();
+                    }
+                    context.restore();
+                },
                 drawingLoop = function() {
                     clear();
+                    if(game_opts.draw_grid) {
+                        drawGrid();
+                    }
                     foods.forEach(drawFood);
                     snakes.forEach(drawSnake);
                     requestAnimationFrame(drawingLoop);
