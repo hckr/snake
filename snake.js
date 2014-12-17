@@ -108,93 +108,121 @@ var SnakeGame = (function(d, w) {
                 position: position
             };
         },
+        KeyEventsManager = (function() {
+            var bindings = {};
+            d.addEventListener('keydown', function(e) {
+                if(e.keyCode in bindings) {
+                    bindings[e.keyCode].forEach(function(callback) {
+                        callback();
+                    });
+                }
+            }, false);
+            return {
+                bind: function(keyCode, callback) {
+                    if(keyCode in bindings) {
+                        bindings[keyCode].push(callback);
+                    } else {
+                        bindings[keyCode] = [ callback ];
+                    }
+                },
+                unbind: function(keyCode, callback) {
+                    if(callback in bindings[keyCode]) {
+                        bindings[keyCode].splice(bindings[keyCode].indexOf(callback), 1);
+                    }
+                }
+            }
+        })(),
         Game = function(game_opts) {
-            var canvas = d.createElement('canvas');
+            var canvas = d.createElement('canvas'),
+                context = canvas.getContext('2d'),
+                game_state = STATES.PLAYING,
+                current_user_direction = DIRECTIONS.RIGHT,
+                last_user_moving_direction,
+                snakes = [],
+                foods = [];
+
+
             canvas.width = game_opts.width * game_opts.point_size;
             canvas.height = game_opts.height * game_opts.point_size;
             if(game_opts.canvas_id) {
                 canvas.id = game_opts.canvas_id;
             }
 
-            var context = canvas.getContext('2d');
-            context.scale(game_opts.point_size, game_opts.point_size);
-
-            var game_state = STATES.PLAYING,
-                current_user_direction = DIRECTIONS.RIGHT,
-                last_user_moving_direction,
-                snakes = [],
-                foods = [];
-
-            d.addEventListener('keydown', function(e) {
-                console.log(e.keyCode);
+            KeyEventsManager.bind(KEYS.LEFT, function() {
+                if(game_state == STATES.PLAYING) {
+                    if(last_user_moving_direction != DIRECTIONS.RIGHT) {
+                        current_user_direction = DIRECTIONS.LEFT;
+                    }
+                }
+            });
+            KeyEventsManager.bind(KEYS.UP, function() {
+                if(game_state == STATES.PLAYING) {
+                    if(last_user_moving_direction != DIRECTIONS.DOWN) {
+                        current_user_direction = DIRECTIONS.UP
+                    }
+                }
+            });
+            KeyEventsManager.bind(KEYS.RIGHT, function() {
+                if(game_state == STATES.PLAYING) {
+                    if(last_user_moving_direction != DIRECTIONS.LEFT) {
+                        current_user_direction = DIRECTIONS.RIGHT
+                    }
+                }
+            });
+            KeyEventsManager.bind(KEYS.DOWN, function() {
+                if(game_state == STATES.PLAYING) {
+                    if(last_user_moving_direction != DIRECTIONS.UP) {
+                        current_user_direction = DIRECTIONS.DOWN
+                    }
+                }
+            });
+            KeyEventsManager.bind(KEYS.P, function() {
                 switch(game_state) {
                     case STATES.PLAYING:
-                        switch(e.keyCode) {
-                            case KEYS.LEFT:
-                                if(last_user_moving_direction != DIRECTIONS.RIGHT) {
-                                    current_user_direction = DIRECTIONS.LEFT
-                                }
-                                break;
-                            case KEYS.UP:
-                                if(last_user_moving_direction != DIRECTIONS.DOWN) {
-                                    current_user_direction = DIRECTIONS.UP
-                                }
-                                break;
-                            case KEYS.RIGHT:
-                                if(last_user_moving_direction != DIRECTIONS.LEFT) {
-                                    current_user_direction = DIRECTIONS.RIGHT
-                                }
-                                break;
-                            case KEYS.DOWN:
-                                if(last_user_moving_direction != DIRECTIONS.UP) {
-                                    current_user_direction = DIRECTIONS.DOWN
-                                }
-                                break;
-                            case KEYS.P:
-                                game_state = STATES.PAUSED;
-                                break;
-                        }
+                        game_state = STATES.PAUSED;
                         break;
                     case STATES.PAUSED:
-                        switch(e.keyCode) {
-                            case KEYS.P:
-                                game_state = STATES.PLAYING;
-                                gameLoop();
-                                break;
-                        }
-                        break;
-                    case STATES.GAME_OVER:
-                        switch(e.keyCode) {
-                            case KEYS.R:
-                                snakes = [];
-                                initializeSnakes();
-                                current_user_direction = DIRECTIONS.RIGHT;
-                                game_state = STATES.PLAYING;
-                                gameLoop();
-                                break;
-                        }
+                        game_state = STATES.PLAYING;
+                        gameLoop();
                         break;
                 }
-                switch(e.keyCode) {
-                    case KEYS.G:
-                        game_opts.draw_grid = !game_opts.draw_grid;
-                        break;
+            });
+            KeyEventsManager.bind(KEYS.R, function() {
+                // temporary - for test convenience
+                if(game_state == STATES.GAME_OVER) {
+                    snakes = [];
+                    initializeSnakes();
+                    current_user_direction = DIRECTIONS.RIGHT;
+                    game_state = STATES.PLAYING;
+                    gameLoop();
                 }
-            }, false);
+            });
+            KeyEventsManager.bind(KEYS.G, function() {
+                game_opts.draw_grid = !game_opts.draw_grid;
+            });
 
             var clear = function() {
+                    context.save();
+                    context.scale(game_opts.point_size, game_opts.point_size);
                     context.clearRect(0, 0, game_opts.width, game_opts.height);
+                    context.restore();
                 },
                 setFillColor = function(color) {
                     context.fillStyle = 'rgb(' + color.r + ', ' + color.g + ', ' + color.b + ')';
                 },
-                setStrokeStyle = function(color) {
+                setStrokeColor = function(color) {
                     context.strokeStyle = 'rgb(' + color.r + ', ' + color.g + ', ' + color.b + ')';
                 },
+                scaleToGamePoints = function() {
+                    context.scale(game_opts.point_size, game_opts.point_size);
+                },
                 drawPoint = function(point) {
+                    context.save();
+                    scaleToGamePoints();
                     context.beginPath();
                     context.arc(point.x + 0.5, point.y + 0.5, 0.5, 0, Math.PI * 2, false);
                     context.fill();
+                    context.restore();
                 },
                 drawFood = function(food) {
                     context.save();
@@ -204,7 +232,7 @@ var SnakeGame = (function(d, w) {
                 },
                 drawSnake = function(snake) {
                     if(snake.isDead() && Date.now() % 500 < 250) {
-                        return;
+                        return; // dead snake blinking
                     }
                     context.save();
                     setFillColor(snake.color);
@@ -215,18 +243,12 @@ var SnakeGame = (function(d, w) {
                 },
                 drawGrid = function() {
                     context.save();
-                    setStrokeStyle(Color(245, 245, 245));
-                    for(var x = 0.5; x <= game_opts.width; x += 2) {
-                        context.beginPath();
-                        context.moveTo(x, 0);
-                        context.lineTo(x, game_opts.height);
-                        context.stroke();
+                    setStrokeColor(Color(200, 200, 200));
+                    for(var x = 0; x <= canvas.width; x += game_opts.point_size) {
+                        context.strokeRect(x, 0, game_opts.point_size, canvas.height);
                     }
-                    for(var y = 0.5; y <= game_opts.height; y += 2) {
-                        context.beginPath();
-                        context.moveTo(0, y);
-                        context.lineTo(game_opts.width, y);
-                        context.stroke();
+                    for(var y = 0; y <= canvas.height; y += game_opts.point_size) {
+                        context.strokeRect(0, y, canvas.width, game_opts.point_size);
                     }
                     context.restore();
                 },
