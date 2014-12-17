@@ -1,12 +1,7 @@
 var SnakeGame = (function(d, w) {
     'use strict';
 
-    var STATES = {
-            PLAYING: 1,
-            PAUSED: 2,
-            GAME_OVER: 3
-        },
-        KEYS = {
+    var KEYS = {
             LEFT: 37,
             UP: 38,
             RIGHT: 39,
@@ -130,81 +125,50 @@ var SnakeGame = (function(d, w) {
                         bindings[keyCode].splice(bindings[keyCode].indexOf(callback), 1);
                     }
                 }
-            }
+            };
         })(),
-        Game = function(game_opts) {
-            var canvas = d.createElement('canvas'),
-                context = canvas.getContext('2d'),
-                game_state = STATES.PLAYING,
-                current_user_direction = DIRECTIONS.RIGHT,
-                last_user_moving_direction,
-                snakes = [],
-                foods = [];
-
-
-            canvas.width = game_opts.width * game_opts.point_size;
-            canvas.height = game_opts.height * game_opts.point_size;
-            if(game_opts.canvas_id) {
-                canvas.id = game_opts.canvas_id;
-            }
-
-            KeyEventsManager.bind(KEYS.LEFT, function() {
-                if(game_state == STATES.PLAYING) {
-                    if(last_user_moving_direction != DIRECTIONS.RIGHT) {
-                        current_user_direction = DIRECTIONS.LEFT;
-                    }
-                }
-            });
-            KeyEventsManager.bind(KEYS.UP, function() {
-                if(game_state == STATES.PLAYING) {
-                    if(last_user_moving_direction != DIRECTIONS.DOWN) {
-                        current_user_direction = DIRECTIONS.UP
-                    }
-                }
-            });
-            KeyEventsManager.bind(KEYS.RIGHT, function() {
-                if(game_state == STATES.PLAYING) {
-                    if(last_user_moving_direction != DIRECTIONS.LEFT) {
-                        current_user_direction = DIRECTIONS.RIGHT
-                    }
-                }
-            });
-            KeyEventsManager.bind(KEYS.DOWN, function() {
-                if(game_state == STATES.PLAYING) {
-                    if(last_user_moving_direction != DIRECTIONS.UP) {
-                        current_user_direction = DIRECTIONS.DOWN
-                    }
-                }
-            });
-            KeyEventsManager.bind(KEYS.P, function() {
-                switch(game_state) {
-                    case STATES.PLAYING:
-                        game_state = STATES.PAUSED;
-                        break;
-                    case STATES.PAUSED:
-                        game_state = STATES.PLAYING;
-                        gameLoop();
-                        break;
-                }
-            });
-            KeyEventsManager.bind(KEYS.R, function() {
-                // temporary - for test convenience
-                if(game_state == STATES.GAME_OVER) {
-                    snakes = [];
-                    initializeSnakes();
-                    current_user_direction = DIRECTIONS.RIGHT;
+        GameState = (function() {
+            var STATES = {
+                    PLAYING: 1,
+                    PAUSED: 2,
+                    GAME_OVER: 3
+                },
+                game_state = STATES.PLAYING;
+            return {
+                start: function() {
                     game_state = STATES.PLAYING;
-                    gameLoop();
-                }
-            });
-            KeyEventsManager.bind(KEYS.G, function() {
-                game_opts.draw_grid = !game_opts.draw_grid;
-            });
+                },
+                isStarted: function() {
+                    return game_state == STATES.PLAYING;
+                },
+                pause: function() {
+                    game_state = STATES.PAUSED;
+                },
+                isPaused: function() {
+                    return game_state == STATES.PAUSED;
+                },
+                over: function() {
+                    game_state = STATES.GAME_OVER;
+                },
+                isOver: function() {
+                    return game_state == STATES.GAME_OVER;
+                },
+            };
+        })(),
+        DrawingEngine = function(opts, foods, snakes) {
+            var canvas = d.createElement('canvas'),
+                context = canvas.getContext('2d');
+            
+            canvas.width = opts.width * opts.point_size;
+            canvas.height = opts.height * opts.point_size;
+            if(opts.canvas_id) {
+                canvas.id = opts.canvas_id;
+            }
 
             var clear = function() {
                     context.save();
-                    context.scale(game_opts.point_size, game_opts.point_size);
-                    context.clearRect(0, 0, game_opts.width, game_opts.height);
+                    context.scale(opts.point_size, opts.point_size);
+                    context.clearRect(0, 0, opts.width, opts.height);
                     context.restore();
                 },
                 setFillColor = function(color) {
@@ -214,7 +178,7 @@ var SnakeGame = (function(d, w) {
                     context.strokeStyle = 'rgb(' + color.r + ', ' + color.g + ', ' + color.b + ')';
                 },
                 scaleToGamePoints = function() {
-                    context.scale(game_opts.point_size, game_opts.point_size);
+                    context.scale(opts.point_size, opts.point_size);
                 },
                 drawPoint = function(point) {
                     context.save();
@@ -244,24 +208,101 @@ var SnakeGame = (function(d, w) {
                 drawGrid = function() {
                     context.save();
                     setStrokeColor(Color(200, 200, 200));
-                    for(var x = 0; x <= canvas.width; x += game_opts.point_size) {
-                        context.strokeRect(x, 0, game_opts.point_size, canvas.height);
+                    for(var x = 0; x <= canvas.width; x += opts.point_size) {
+                        context.strokeRect(x, 0, opts.point_size, canvas.height);
                     }
-                    for(var y = 0; y <= canvas.height; y += game_opts.point_size) {
-                        context.strokeRect(0, y, canvas.width, game_opts.point_size);
+                    for(var y = 0; y <= canvas.height; y += opts.point_size) {
+                        context.strokeRect(0, y, canvas.width, opts.point_size);
                     }
                     context.restore();
-                },
-                drawingLoop = function() {
+                }, toggleGrid = function() {
+                    opts.draw_grid = !opts.draw_grid;
+                }, drawingLoop = function() {
                     clear();
-                    if(game_opts.draw_grid) {
+                    if(opts.draw_grid) {
                         drawGrid();
                     }
                     foods.forEach(drawFood);
                     snakes.forEach(drawSnake);
                     requestAnimationFrame(drawingLoop);
-                },
-                userControlledSnakeDirectionCallback = function() {
+                };
+            return {
+                drawingLoop: drawingLoop,
+                toggleGrid: toggleGrid,
+                getCanvas: function() {
+                    return canvas;
+                }
+            };
+        },
+        Game = function(game_opts) {
+            var current_user_direction = DIRECTIONS.RIGHT,
+                last_user_moving_direction,
+                snakes = [],
+                foods = [],
+                drawingEngine = DrawingEngine(
+                    {
+                        width: game_opts.width,
+                        height: game_opts.height,
+                        point_size: game_opts.point_size,
+                        draw_grid: game_opts.draw_grid,
+                        canvas_id: game_opts.canvas_id
+                    },
+                    foods,
+                    snakes
+                );
+
+            KeyEventsManager.bind(KEYS.LEFT, function() {
+                if(GameState.isStarted()) {
+                    if(last_user_moving_direction != DIRECTIONS.RIGHT) {
+                        current_user_direction = DIRECTIONS.LEFT;
+                    }
+                }
+            });
+            KeyEventsManager.bind(KEYS.UP, function() {
+                if(GameState.isStarted()) {
+                    if(last_user_moving_direction != DIRECTIONS.DOWN) {
+                        current_user_direction = DIRECTIONS.UP
+                    }
+                }
+            });
+            KeyEventsManager.bind(KEYS.RIGHT, function() {
+                if(GameState.isStarted()) {
+                    if(last_user_moving_direction != DIRECTIONS.LEFT) {
+                        current_user_direction = DIRECTIONS.RIGHT
+                    }
+                }
+            });
+            KeyEventsManager.bind(KEYS.DOWN, function() {
+                if(GameState.isStarted()) {
+                    if(last_user_moving_direction != DIRECTIONS.UP) {
+                        current_user_direction = DIRECTIONS.DOWN
+                    }
+                }
+            });
+            KeyEventsManager.bind(KEYS.P, function() {
+                if(GameState.isStarted()) {
+                    GameState.pause();
+                } else if(GameState.isPaused()) {
+                    GameState.start();
+                    gameLoop();
+                }
+            });
+            KeyEventsManager.bind(KEYS.R, function() {
+                console.log('R');
+                // temporary - for test convenience
+                if(GameState.isOver()) {
+                    snakes = [];
+                    initializeSnakes();
+                    current_user_direction = DIRECTIONS.RIGHT;
+                    GameState.start();
+                    gameLoop();
+                }
+            });
+            KeyEventsManager.bind(KEYS.G, function() {
+                drawingEngine.toggleGrid();
+            });
+
+            var userControlledSnakeDirectionCallback = function() {
                     return current_user_direction;
                 },
                 computerControlledSnakeDirectionCallback = function(points, current_direction) {
@@ -312,7 +353,7 @@ var SnakeGame = (function(d, w) {
                     foods.splice(foods.indexOf(food), 1);
                 },
                 gameLoop = function() {
-                    if(game_state != STATES.PLAYING) {
+                    if(!GameState.isStarted()) {
                         return;
                     }
                     var dead_snakes = [];
@@ -329,7 +370,7 @@ var SnakeGame = (function(d, w) {
                                 if(snake.isHead(point) && snake.getHead() !== point) {
                                     dead_snakes.push(snake);
                                     if(snake.user_controlled) {
-                                        game_state = STATES.GAME_OVER;
+                                        GameState.over();
                                         return;
                                     }
                                 }
@@ -337,7 +378,6 @@ var SnakeGame = (function(d, w) {
                         });
                         foods.forEach(function(food) {
                             if(snake.isHead(food.position)) {
-                                // game_opts.onFoodEaten();
                                 snake.enlarge();
                                 deleteFood(food);
                             }
@@ -375,13 +415,11 @@ var SnakeGame = (function(d, w) {
                 };
 
             initializeSnakes();
-            drawingLoop();
+            drawingEngine.drawingLoop();
             gameLoop();
 
             return {
-                getCanvas: function() {
-                    return canvas;
-                }
+                getCanvas: drawingEngine.getCanvas
             };
         },
         exports = function(opts) {
